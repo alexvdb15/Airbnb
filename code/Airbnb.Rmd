@@ -1,0 +1,109 @@
+---
+title: "Visualisation de Airbnb de la Ville de Québec"
+subtitle: "(Données en date du 6 juillet 2021)"
+author: "Alexandra Van den Bossche"
+date: "31/07/2021"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Questions auxquelles nous tenterons de répondre:
+
+* Quels sont les quartiers avec le plus d'annonces?
+* Le prix des annonces varie-t-il selon l'emplacement?
+* Quels sont les différents types de propriétés? Varient-ils selon les quartiers?
+
+```{r include=FALSE}
+#library(data.table)
+#library(readr)
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(plotly)
+library(finalfit)
+
+listing = read.csv("./data/listings.csv", encoding = "UTF-8", stringsAsFactors = T)
+```
+
+## Quartiers et leurs prix
+Cette section répondra aux questions relatives au nombre d'annonces par quartiers et aux variations de prix entre les différents quartiers de la Ville de Québec. 
+
+```{r echo=FALSE, fig.height=8}
+out_quartiers = fct_lump(listing$neighbourhood, 15, other_level = "Autre")
+quartiers = fct_count(out_quartiers, sort = T)
+
+plot_ly(quartiers, labels = ~f, values = ~n, type = "pie", textposition = "outside", textinfo = "percent") %>%
+  layout(title = "Pourcentage des annonces par quartiers", legend = list(orientation = "h"))
+```
+Le graphique montre que le quartier Vieux-Québec/Cap-Blanc/Colline parlementaire a le plus d'annonces de locations de logements, suivi par les quartiers de Saint-Roch, Saint-Jean-Baptiste, Saint-Sauveur et Vieux-Limoilou. On remarque aussi que les quartiers avec le plus d'annonces sont situé dans l'arrondissement de la Cité-Limoilou. En effet, les 9 quartiers de l'arrondissement de la Cité-Limoilou font partie des 15 quartiers ayant le plus d'annonces sur Airbnb.
+
+Le prix d'une annonce varie entre 16\$ par nuit à 13 000\$ par nuit. Les annonces avec un prix supérieur à 9 000$ se situent dans les quartiers de la Cité universitaire, du Vieux-Québec/Cap-Blanc/Colline parlementaire et de Notre-Dame-des-Laurentides.
+
+Le graphique ci-dessous tient en compte les 3 valeurs pour lesquelles le prix est supérieur à 9 000$ par nuit. Il est normal de constater que le prix moyen par nuit est le plus élevé pour le quartier de Notre-Dame-des-Laurentides, car la moyenne du prix est très susceptible aux variations dû au faible nombre d'annonces (22).
+
+```{r echo=FALSE, fig.height=10, fig.width=15}
+prix_quartier = listing %>%
+  group_by(neighbourhood) %>%
+  summarise_at(vars(price),list(prix = mean))
+  
+ggplot(prix_quartier, aes(x = reorder(neighbourhood,prix), y = prix)) + geom_bar(stat = "identity", width = 0.9) + geom_text(aes(label = round_tidy(prix,2)), hjust = -0.1) + coord_flip() + scale_y_continuous(name = "Prix moyen par nuit") + scale_x_discrete(name = "Quartier") + theme(panel.background = element_blank()) + ggtitle("Prix moyen par quartier") + theme(text = element_text(size = 15))
+
+```
+
+En enlevant les 3 valeurs aberrantes, on obtient le graphique suivant.
+```{r echo=FALSE, fig.height=10, fig.width=15}
+q = listing[-c(1499,1050,930),]
+q_prix = q %>%
+  group_by(neighbourhood) %>%
+  summarise_at(vars(price),list(prix = mean))
+
+ggplot(q_prix, aes(x = reorder(neighbourhood,prix), y = prix)) + geom_bar(stat = "identity", width = 0.9) + geom_text(aes(label = round_tidy(prix,2)), hjust = -0.1) + coord_flip() + scale_y_continuous(name = "Prix moyen par nuit") + scale_x_discrete(name = "Quartier") + theme(panel.background = element_blank()) + ggtitle("Prix moyen par quartier (sans les observations aberrantes)") + theme(text = element_text(size = 15))
+```
+
+Le Quartier 5-1 et le quartier du Vieux-Québec/Cap-Blanc/Colline parlementaire sont toujours parmi les quartiers avec le prix moyen le plus élevé. Par contre, le prix moyen des quartiers de Notre-Dame-des-Laurentides et de la Cité universitaire a considérablement diminué, passant de 571.14\$ par nuit à 122.24\$ par nuit et de 291.78\$ à 100.21\$ respectivement. Les meilleurs prix moyen par nuit proviennent d'annonces des quartiers Vanier et Duberger-Les Saules, tous les deux situés dans l'arrondissement Les Rivières.
+    
+    
+
+## Quartiers et leurs types de propriétés
+Cette section étudie la relation entre les types de propriétés et le quartier. La principale question à laquelle on cherche à répondre est de savoir si les quartiers de la Ville de Québec offrent des types de location différents 
+
+```{r echo=FALSE}
+type_propriete = fct_count(listing$room_type, sort = T)
+
+plot_ly(type_propriete, labels = ~f, values = ~n, type = "pie", marker = list(colors = c("#0066CC","#FF0000","#003300","#FFCC00")),textposition = "outside", textinfo = "percent") %>%
+  layout(title = "Pourcentage des types de propriétés", legend = list(x=100, y=0.5))
+```
+On peut voir que le principal type de propriété est la location d'une maison ou d'un appartement complet qui constitue 77.3% des annonces sur Airbnb. L'autre type de propriété significative est la chambre privée avec 20.3%.
+
+Le graphique suivant montre le rapport entre le type de propriété et le nombre total de propriétés dans le quartier.
+
+```{r echo=FALSE, fig.height=10, fig.width=15, message=FALSE}
+type_quartier = listing %>%
+  group_by(neighbourhood, room_type) %>%
+  summarize(freq = n())
+
+ggplot(type_quartier, aes(x = neighbourhood, y = freq, fill = room_type)) + geom_bar(stat = "identity") + coord_flip() + scale_y_continuous(name = "Nombre d'annonces") + scale_x_discrete(name = "Quartier") + scale_fill_discrete(name = "Type de propriété") + theme(panel.background = element_blank()) + scale_fill_manual(name = "Type de propriété", values = c("#0066CC","#003300","#FF0000","#FFCC00")) + theme(text = element_text(size = 15)) + ggtitle("Nombre de type de propriété par quartier")
+```
+
+On peut voir que les annonces pour la location d'une maison complète ou d'un appartement complet sont les plus nombreuses pour la majorité des quartiers, à l'exception des quartiers Vanier et de Val-Bélair. Les 2 quartiers ont plus de propriétés de type chambre privée que de logement complet.    
+
+Le nombre maximal d'annonces de type logement complet (soit maison ou appartement) est situé dans le quartier du Vieux-Québec avec 400 annonces, suivi de près par le quartier Saint-Roch avec 335 annonces, constituant 93% de toutes les propriétés de ce quartier.    
+
+Le quartier du Vieux-Québec/Cap-Blanc/Colline parlementaire et le quartier Saint-Jean-Baptiste sont les seuls qui annoncent les 4 différents types de propriété. Le Quartier 5-4 a des annonces pour 3 types de propriété, soit le logement complet, la chambre privée et la chambre d'hôtel. Les quartiers des Chutes-Montmorency et 4-6 annoncent des locations pour 3 types de propriété, soit le logement complet, la chambre privée et la chambre partagée. Tous les autres quartiers annoncent seulement le logement complet et la chambre privée comme type de propriété.    
+
+## Conclusion
+Dans cette analyse et visualisation des données, on a obtenu plusieurs informations intéressantes sur le marché de location Airbnb. Les réponses aux questions auxquelles nous avons tenté de répondre au début du document sont résumées ci-dessous:    
+
+**Quels sont les quartiers avec le plus d'annonces?**  
+Le quartier du Vieux-Québec/Cap-Blanc/Colline parlementaire est le quartier ayant le plus d'annonces par rapport aux autres quartiers de la Ville de Québec. Aussi, l'arrondissement Cité-Limoilou a beaucoup d'annonces présentes sur Airbnb.    
+
+**Le prix des annonces varie-t-il selon l'emplacement?** 
+Il y a quelques valeurs dont le prix par nuit est supérieur à 9 000$ dans les quartiers de la Cité universitaire, du Vieux-Québec/Cap-Blanc/Colline parlementaire et de Notre-Dame-des-Laurentides qui font varier le prix moyen par nuit. Les prix sont clairement plus élevés pour les locations dans le Quartier 5-1 et aussi dans le quartier du Vieux-Québec/Cap-Blanc/Colline parlementaire.    
+
+
+**Quels sont les différents types de propriétés? Varient-ils selon les quartiers?**
+Il existe 4 types de propriétés annoncés sur Airbnb pour la Ville de Québec, la majorité des annonces est la location d'un logement complet (maison ou appartement) ou d'une chambre privée. Le rapport entre le type d'annonces et le nombre total varie selon les quartiers. Le Vieux-Québec/Cap-Blanc/Colline parlementaire et Saint-Roch ont tendance à avoir des annonces pour un logement complet.
+
+&nbsp;
